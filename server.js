@@ -1,4 +1,6 @@
 import * as dotenv from 'dotenv';
+import cors from 'cors';
+
 dotenv.config();
 
 import express from 'express';
@@ -9,6 +11,7 @@ const BASEROW_API = 'https://api.baserow.io/api/database/rows/table';
 const BASEROW_TOKEN = process.env.BASEROW_TOKEN;
 
 app.use(express.json());
+app.use(cors()); 
 
 function proxyBaserow(req, res, method = 'GET', body = null) {
   console.log(`Server running on port: ${BASEROW_TOKEN}`);
