@@ -56,6 +56,10 @@ app.get('/api/baserow/rows/:tableId', (req, res) => {
   proxyBaserow(req, res, 'GET', null);
 });
 
+app.get('/api/getToken', (req, res) => {
+  res.status(200).json({ token: BASEROW_TOKEN });
+});
+
 // POST row
 app.post('/api/baserow/rows/:tableId', (req, res) => {
   proxyBaserow(req, res, 'POST', req.body);
@@ -74,3 +78,4 @@ app.delete('/api/baserow/rows/:tableId/:rowId', (req, res) => {
 app.listen(port, () => {
   console.log(`API running on http://localhost:${port}`);
 });
+
