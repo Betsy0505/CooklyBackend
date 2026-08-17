@@ -1,4 +1,7 @@
-const express = require('express');
+import * as dotenv from 'dotenv';
+dotenv.config();
+
+import express from 'express';
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -8,6 +11,7 @@ const BASEROW_TOKEN = process.env.BASEROW_TOKEN;
 app.use(express.json());
 
 function proxyBaserow(req, res, method = 'GET', body = null) {
+  console.log(`Server running on port: ${BASEROW_TOKEN}`);
   const { tableId, rowId } = req.params;
 
   const url = rowId
