@@ -88,8 +88,55 @@ const limitadorPin = rateLimit({
   message: { error: 'Demasiados intentos. Intenta de nuevo más tarde.' }
 });
 
-app.post('/api/auth/pin', limitadorPin, async (req, res) => {
+// control de intentos progresivos por IPPPP 
+const intentosPin = new Map(); // ip -> {fallos: number, bloqueadoHasta: number}
+// Duracion de bloqueo según el número de fallos consecutivos
+const ESPERAS_SEGUNDOS = [0, 60, 180, 300]; 
+
+function segundosDeEspera(fallos) {
+  const indice = Math.min(fallos, ESPERAS_SEGUNDOS.length - 1);
+  return ESPERAS_SEGUNDOS[indice];
+}
+
+function obtenerEstado(ip){
+  return intentosPin.get(ip) || { fallos: 0, bloqueadoHasta: 0 };
+}
+
+function registrarFallo(ip){
+  const estado = obtenerEstado(ip);
+    estado.fallos += 1;
+    estado.bloqueadoHasta = Date.now() + segundosDeEspera(estado.fallos) * 1000;
+    intentosPin.set(ip, estado);
+    return estado;
+  }
+
+  function limpiarIntentos(ip){
+    intentosPin.delete(ip);
+  }
+
+  // limpieza periodica para no acumular ip viejas
+  setInterval(() =>
+  {
+    const ahora = Date.now();
+    for(const [ip, estado] of intentosPin.entries()) {
+      if(estado.bloqueadoHasta < ahora) intentosPin.delete(ip);
+    }
+  }, 10*60*1000);
+
+app.post('/api/auth/pin', async (req, res) => {
+  const ip = req.ip;
   const { pin } = req.body;
+
+  const estado = obtenerEstado(ip);
+  const ahora = Date.now();
+
+  if(estado.bloqueadoHasta > ahora) {
+    const segundosRestantes = Math.ceil((estado.bloqueadoHasta - ahora) / 1000);
+    return res.status(429).json({
+      error: 'Demasiados intentos fallidos. Espera antes de volver a intentar.',
+      segundosRestantes
+    }); 
+  }
 
   if (!/^\d{6}$/.test(pin || '')) {
     return res.status(400).json({ error: 'El PIN debe tener seis dígitos.' });
@@ -99,15 +146,21 @@ app.post('/api/auth/pin', limitadorPin, async (req, res) => {
     const hashPin = await obtenerHashPin();
     const esValido = await bcrypt.compare(pin, hashPin);
 
-    if (!esValido) {
-      return res.status(401).json({ error: 'PIN incorrecto.' });
+    if(!esValido) {
+      const nuevoEstado = registrarFallo(ip);
+      const segundosRestantes = segundosDeEspera(nuevoEstado.fallos);
+      return res.status(401).json({
+        error: 'Pin Incorrecto',
+        segundosRestantes
+      });
     }
 
+    limpiarIntentos(ip);
     req.session.accesoCookly = true;
     return res.json({ ok: true });
   } catch (error) {
-    console.error('Error al validar el PIN:', error.message);
-    return res.status(500).json({ error: 'No fue posible validar el acceso.' });
+    console.error('Error al validar el PIN', error.message);
+    return res.status(500).json({ error: 'No fue posible validar el acceso'});
   }
 });
 
